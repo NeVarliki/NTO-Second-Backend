@@ -14,7 +14,7 @@ object RequestValidation{
         return CreateRequestBody(
             request.fullName?.trim(),
             request.phone?.trim(),
-            request.organization?.trim(),
+            request.organization?.trim()?.ifEmpty { null },
             request.purpose?.trim(),
             request.validFrom?.trim(),
             request.validTo?.trim()
@@ -82,30 +82,40 @@ object RequestValidation{
     private fun checkValidationPeriod(validFrom: String?, validTo: String?, now: LocalDateTime): Map<String, String> {
         val periodReasons: MutableMap<String, String> = mutableMapOf()
         var parsedFrom: LocalDateTime? = null
-        var parsedTo: LocalDateTime? = null
-        try {
-            parsedFrom = LocalDateTime.parse(validFrom!!)
-            if(parsedFrom.isBefore(now)){
-                periodReasons.put("validFrom", "ValidFrom is before than current moment")
+        var parsedTo: LocalDateTime?
+        if(validFrom != null && Regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}$").matches(validFrom)) {
+            try {
+                parsedFrom = LocalDateTime.parse(validFrom)
+                if (parsedFrom.isBefore(now)) {
+                    periodReasons.put("validFrom", "ValidFrom is before than current moment")
+                }
+            } catch (_: RuntimeException) {
+                periodReasons.put("validFrom", "ValidFrom is incorrect format")
             }
-        } catch (_: RuntimeException) {
+        } else{
             periodReasons.put("validFrom", "ValidFrom is incorrect format")
         }
-        try {
-            parsedTo = LocalDateTime.parse(validTo!!)
-            if(parsedFrom != null && !parsedTo.isAfter(parsedFrom)) {
-                periodReasons.put("validTo", "ValidTo is not after than validFrom")
+        if(validTo != null && Regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}$").matches(validTo)) {
+            try {
+                parsedTo = LocalDateTime.parse(validTo)
+                if (parsedFrom != null && !parsedTo.isAfter(parsedFrom)) {
+                    periodReasons.put("validTo", "ValidTo is not after than validFrom")
+                }
+                if (parsedFrom != null && !parsedTo.toLocalDate().equals(parsedFrom.toLocalDate())) {
+                    periodReasons.put("validTo", "ValidTo date is not the same with validFrom")
+                }
+            } catch (_: RuntimeException) {
+                periodReasons.put("validTo", "ValidTo is incorrect format")
             }
-            if(parsedFrom != null && !parsedTo.toLocalDate().equals(parsedFrom.toLocalDate())) {
-                periodReasons.put("validTo", "ValidTo date is not the same with validFrom")
-            }
-        } catch (_: RuntimeException) {
+        } else{
             periodReasons.put("validTo", "ValidTo is incorrect format")
         }
         return periodReasons
     }
     fun parseDate(date: String): LocalDateTime {
-        val parsedDate = LocalDateTime.parse(date)
+        return formatDate(LocalDateTime.parse(date))
+    }
+    fun formatDate(parsedDate: LocalDateTime): LocalDateTime{
         return parsedDate.minusNanos(parsedDate.nano.toLong())
     }
 }

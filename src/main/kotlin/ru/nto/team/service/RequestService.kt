@@ -13,6 +13,7 @@ import ru.nto.team.entity.Staff
 import ru.nto.team.dto.response.RequestDetailsDto
 import ru.nto.team.dto.response.RequestListDto
 import ru.nto.team.exceptions.DuplicateRequestExceptionDomain
+import ru.nto.team.exceptions.InvalidStatusDecisionExceptionDomain
 import ru.nto.team.exceptions.UnauthorizedExceptionDomain
 import ru.nto.team.repository.PassRequestRepository
 import ru.nto.team.repository.StaffRepository
@@ -81,12 +82,12 @@ class RequestService(private val staffRepository: StaffRepository,
         val parsedFrom = RequestValidation.parseDate(normalizedBody.validFrom!!)
         val parsedTo = RequestValidation.parseDate(normalizedBody.validTo!!)
         passRequestRepository.findAllByHostAndStatus(staff, RequestStatus.PENDING).forEach { it ->
-            if (it.phone == normalizedBody.phone!! && parsedFrom.isBefore(it.validFrom) && it.validFrom.isBefore(parsedTo)) {
+            if (it.phone == normalizedBody.phone!! && parsedFrom.isBefore(it.validTo) && it.validFrom.isBefore(parsedTo)) {
                 throw DuplicateRequestExceptionDomain()
             }
         }
         passRequestRepository.findAllByHostAndStatus(staff, RequestStatus.APPROVED).forEach { it ->
-            if (it.phone == normalizedBody.phone!! && parsedFrom.isBefore(it.validFrom) && it.validFrom.isBefore(parsedTo)) {
+            if (it.phone == normalizedBody.phone!! && parsedFrom.isBefore(it.validTo) && it.validFrom.isBefore(parsedTo)) {
                 throw DuplicateRequestExceptionDomain()
             }
         }
@@ -98,8 +99,8 @@ class RequestService(private val staffRepository: StaffRepository,
             purpose = normalizedBody.purpose!!,
             validFrom = parsedFrom,
             validTo = parsedTo,
-            createdAt = now.minusNanos(now.nano.toLong()),
-            updatedAt = now.minusNanos(now.nano.toLong())
+            createdAt = RequestValidation.formatDate(now),
+            updatedAt = RequestValidation.formatDate(now)
         ))
         return RequestDetailsDto(passRequest.id, passRequest.fullName,
             passRequest.phone, passRequest.organization,
@@ -110,9 +111,12 @@ class RequestService(private val staffRepository: StaffRepository,
     }
     fun cancel(code: String, id: Long): RequestDetailsDto {
         val staff = getStaff(code)
-        var request: PassRequest = passRequestRepository.findByIdAndHostAndStatus(id, staff, RequestStatus.PENDING) ?: throw RequestNotFoundExceptionDomain()
+        var request: PassRequest = passRequestRepository.findByIdAndHost(id, staff) ?: throw RequestNotFoundExceptionDomain()
+        if (request.status != RequestStatus.PENDING){
+            throw InvalidStatusDecisionExceptionDomain()
+        }
         request.status = RequestStatus.CANCELLED
-        request.updatedAt = LocalDateTime.now(clock)
+        request.updatedAt = RequestValidation.formatDate(LocalDateTime.now(clock))
         request = passRequestRepository.save(request)
         return RequestDetailsDto(
             request.id, request.fullName,
@@ -124,18 +128,23 @@ class RequestService(private val staffRepository: StaffRepository,
     }
     @Transactional
     fun decide(id: Long, body: DecisionBody): RequestDetailsDto {
-        var passRequest: PassRequest = passRequestRepository.findByIdAndStatus(id, RequestStatus.PENDING) ?: throw RequestNotFoundExceptionDomain()
+        var passRequest: PassRequest = passRequestRepository.findById(id).orElse(null) ?: throw RequestNotFoundExceptionDomain()
         val normalizedBody: DecisionBody = RequestValidation.normalizeDecision(body)
+        val now = LocalDateTime.now(clock)
         RequestValidation.checkDecision(normalizedBody)
+	if(passRequest.status != RequestStatus.PENDING){
+            throw InvalidStatusDecisionExceptionDomain()
+        }
         val parsedStatus: RequestStatus = RequestStatus.valueOf(normalizedBody.status!!)
         if (parsedStatus == RequestStatus.APPROVED){
             passRequest.status = parsedStatus
-            passRequest.updatedAt = LocalDateTime.now(clock)
+	    passRequest.comment = null
+            passRequest.updatedAt = RequestValidation.formatDate(now)
             passRequest = passRequestRepository.save(passRequest)
         } else {
             passRequest.status = parsedStatus
             passRequest.comment = normalizedBody.comment
-            passRequest.updatedAt = LocalDateTime.now(clock)
+            passRequest.updatedAt = RequestValidation.formatDate(now)
             passRequest = passRequestRepository.save(passRequest)
         }
         return RequestDetailsDto(passRequest.id, passRequest.fullName,

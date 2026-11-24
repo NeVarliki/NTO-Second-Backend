@@ -9,7 +9,7 @@ sealed class DomainApiException(val status: HttpStatus, message: String) : Runti
 class ValidationException(val reasons: Map<String, String>): RuntimeException("Invalid request")
 class UnauthorizedExceptionDomain: DomainApiException(HttpStatus.UNAUTHORIZED, HttpStatus.UNAUTHORIZED.reasonPhrase)
 class InvalidCodeFormatExceptionDomain: DomainApiException(HttpStatus.BAD_REQUEST, "Invalid code format")
-class InvalidStatusFormatExceptionDomain: DomainApiException(HttpStatus.BAD_REQUEST, "Invalid status format")
+class InvalidStatusFormatExceptionDomain: DomainApiException(HttpStatus.BAD_REQUEST, "Invalid status")
 class RequestNotFoundExceptionDomain: DomainApiException(HttpStatus.NOT_FOUND, "Request not found")
 class DuplicateRequestExceptionDomain: DomainApiException(HttpStatus.CONFLICT, "Duplicate request")
 class InvalidStatusDecisionExceptionDomain: DomainApiException(HttpStatus.CONFLICT, "Invalid status transition")
